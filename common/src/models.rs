@@ -36,3 +36,19 @@ pub struct Session {
     pub jkt: String,
     pub expires_at: DateTime<Utc>,
 }
+
+/// Document stored at `users/{user_id}/groups/{group_id}`. Its existence
+/// is the membership; it carries no fields of its own beyond the document
+/// ID (the group ID), read via Firestore's `_firestore_id` alias.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct GroupMembership {
+    #[serde(default, alias = "_firestore_id", skip_serializing_if = "Option::is_none")]
+    pub group_id: Option<String>,
+}
+
+/// Arbitrary, function-defined attributes (e.g. `department`,
+/// `approval_limit`), stored at `functions/{function_id}/groups/{group_id}`
+/// and `functions/{function_id}/users/{user_id}`. Opaque to everything
+/// except the API that defined them — "fine-grained permission handled at
+/// the API level".
+pub type Attributes = std::collections::HashMap<String, serde_json::Value>;

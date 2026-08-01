@@ -123,6 +123,24 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1505bd5d3d116872e7271a6d4e16d81d0c8570876c8de68093a09ac269d8aac0"
 
 [[package]]
+name = "authorization"
+version = "0.1.0"
+dependencies = [
+ "axum 0.8.9",
+ "chrono",
+ "common",
+ "firestore",
+ "futures",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+ "uuid",
+]
+
+[[package]]
 name = "autocfg"
 version = "1.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -334,6 +352,50 @@ dependencies = [
  "cfg-if",
  "cpufeatures 0.3.0",
  "rand_core 0.10.1",
+]
+
+[[package]]
+name = "check1"
+version = "0.1.0"
+dependencies = [
+ "authorization",
+ "axum 0.8.9",
+ "base64 0.22.1",
+ "chrono",
+ "common",
+ "firestore",
+ "jsonwebtoken",
+ "p256",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tower-http",
+ "tracing",
+ "tracing-subscriber",
+ "uuid",
+]
+
+[[package]]
+name = "check2"
+version = "0.1.0"
+dependencies = [
+ "authorization",
+ "axum 0.8.9",
+ "base64 0.22.1",
+ "chrono",
+ "common",
+ "firestore",
+ "jsonwebtoken",
+ "p256",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tower-http",
+ "tracing",
+ "tracing-subscriber",
+ "uuid",
 ]
 
 [[package]]

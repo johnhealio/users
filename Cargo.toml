@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["common", "logon", "logout", "registration"]
+members = ["authorization", "check1", "check2","common", "logon", "logout", "registration"]
 
 [workspace.dependencies]
 tokio = { version = "1", features = ["full"] }

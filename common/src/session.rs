@@ -18,6 +18,7 @@ pub fn hash_token(token: &str) -> String {
 #[derive(Debug)]
 pub struct AuthenticatedSession {
     pub user_id: Uuid,
+    pub token: String,
     pub token_hash: String,
 }
 
@@ -40,20 +41,14 @@ impl From<firestore::errors::FirestoreError> for SessionError {
     }
 }
 
-/// Authenticates a request against an existing session: parses the
-/// `Authorization: DPoP <token>` header (RFC 9449), loads the session it
-/// names, verifies the accompanying DPoP proof, and checks the proof's key
-/// thumbprint matches the one bound to the session at logon.
-pub async fn authenticate(
-    db: &FirestoreDb,
-    authorization_header: &str,
-    dpop_proof: &str,
-    expected_htm: &str,
-    expected_htu: &str,
-) -> Result<AuthenticatedSession, SessionError> {
-    let token = parse_dpop_authorization(authorization_header)?;
+/// Loads the session named by a raw opaque token and checks it hasn't
+/// expired. Doesn't verify a DPoP proof — callers that need proof-of-
+/// possession (i.e. anything talking directly to a browser) should use
+/// [`authenticate`] instead; this is for server-to-server checks where the
+/// browser's proof was already verified once, at the API the browser's
+/// request actually landed on.
+pub async fn load_active_session(db: &FirestoreDb, token: &str) -> Result<Session, SessionError> {
     let token_hash = hash_token(token);
-
     let session: Option<Session> = db
         .fluent()
         .select()
@@ -67,6 +62,23 @@ pub async fn authenticate(
         return Err(SessionError::SessionExpired);
     }
 
+    Ok(session)
+}
+
+/// Authenticates a request against an existing session: parses the
+/// `Authorization: DPoP <token>` header (RFC 9449), loads the session it
+/// names, verifies the accompanying DPoP proof, and checks the proof's key
+/// thumbprint matches the one bound to the session at logon.
+pub async fn authenticate(
+    db: &FirestoreDb,
+    authorization_header: &str,
+    dpop_proof: &str,
+    expected_htm: &str,
+    expected_htu: &str,
+) -> Result<AuthenticatedSession, SessionError> {
+    let token = parse_dpop_authorization(authorization_header)?;
+    let session = load_active_session(db, token).await?;
+
     let verified = dpop::verify_proof(db, dpop_proof, expected_htm, expected_htu)
         .await
         .map_err(SessionError::Dpop)?;
@@ -77,7 +89,8 @@ pub async fn authenticate(
 
     Ok(AuthenticatedSession {
         user_id: session.user_id,
-        token_hash,
+        token: token.to_string(),
+        token_hash: hash_token(token),
     })
 }
 

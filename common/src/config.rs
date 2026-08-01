@@ -9,6 +9,9 @@ pub struct Config {
     pub port: u16,
     pub rp_id: String,
     pub rp_origin: String,
+    /// Base URL of the authorization service, used by any function that
+    /// needs to check what a session is allowed to do.
+    pub authorization_url: String,
 }
 
 impl Config {
@@ -25,6 +28,8 @@ impl Config {
             rp_id: env::var("RP_ID").unwrap_or_else(|_| "localhost".to_string()),
             rp_origin: env::var("RP_ORIGIN")
                 .unwrap_or_else(|_| "http://localhost:8081".to_string()),
+            authorization_url: env::var("AUTHORIZATION_URL")
+                .unwrap_or_else(|_| "http://localhost:8084".to_string()),
         }
     }
 }
