@@ -16,3 +16,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 tower-http = { version = "0.6", features = ["fs"] }
 base64 = "0.22"
 futures = "0.3"
+sha2 = "0.10"
+rand = "0.9"
+jsonwebtoken = "9"
+p256 = { version = "0.13", features = ["ecdsa", "pkcs8"] }

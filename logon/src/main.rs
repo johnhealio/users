@@ -2,10 +2,12 @@ mod repo;
 mod webauthn;
 
 use axum::extract::State;
-use axum::http::StatusCode;
+use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::routing::post;
 use axum::{Json, Router};
+use chrono::{DateTime, Utc};
+use common::dpop::DpopError;
 use common::Config;
 use firestore::FirestoreDb;
 use repo::AuthenticationSession;
@@ -22,6 +24,7 @@ const COMMON_STATIC_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../common/
 struct AppState {
     db: FirestoreDb,
     webauthn: Webauthn,
+    rp_origin: String,
 }
 
 #[tokio::main]
@@ -36,7 +39,12 @@ async fn main() {
         .expect("failed to connect to Firestore");
     let webauthn = webauthn::build(&config);
     let port = config.port;
-    let state = AppState { db, webauthn };
+    let rp_origin = config.rp_origin.clone();
+    let state = AppState {
+        db,
+        webauthn,
+        rp_origin,
+    };
 
     let app = Router::new()
         .route("/api/logon/start", post(start_logon))
@@ -108,12 +116,27 @@ struct FinishLogonRequest {
 struct FinishLogonResponse {
     user_id: Uuid,
     username: String,
+    access_token: String,
+    expires_at: DateTime<Utc>,
 }
 
 async fn finish_logon(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Json(req): Json<FinishLogonRequest>,
 ) -> Result<Json<FinishLogonResponse>, AppError> {
+    // Verified before the WebAuthn session is consumed: a bad DPoP proof
+    // shouldn't burn the one-shot authentication session, since the client
+    // may just need to retry with a corrected proof.
+    let dpop_proof = headers
+        .get("DPoP")
+        .and_then(|v| v.to_str().ok())
+        .ok_or(AppError::MissingDpopProof)?;
+    let expected_htu = format!("{}/api/logon/finish", state.rp_origin);
+    let verified_dpop = common::dpop::verify_proof(&state.db, dpop_proof, "POST", &expected_htu)
+        .await
+        .map_err(AppError::Dpop)?;
+
     let session = repo::take_authentication_session(&state.db, &req.session_id)
         .await?
         .ok_or(AppError::SessionNotFound)?;
@@ -138,9 +161,14 @@ async fn finish_logon(
         .await?
         .ok_or(AppError::UnknownUsername)?;
 
+    let (access_token, expires_at) =
+        repo::create_session(&state.db, user.user_id, &verified_dpop.jkt).await?;
+
     Ok(Json(FinishLogonResponse {
         user_id: user.user_id,
         username: user.username,
+        access_token,
+        expires_at,
     }))
 }
 
@@ -150,6 +178,8 @@ enum AppError {
     NoCredentials,
     SessionNotFound,
     SessionExpired,
+    MissingDpopProof,
+    Dpop(DpopError),
     BadRequest(String),
     Webauthn(webauthn_rs::prelude::WebauthnError),
     Firestore(firestore::errors::FirestoreError),
@@ -175,6 +205,17 @@ impl IntoResponse for AppError {
             ),
             AppError::SessionExpired => {
                 (StatusCode::BAD_REQUEST, "logon session expired".to_string())
+            }
+            AppError::MissingDpopProof => (
+                StatusCode::BAD_REQUEST,
+                "missing DPoP proof header".to_string(),
+            ),
+            AppError::Dpop(e) => {
+                tracing::warn!(?e, "dpop proof verification failed");
+                (
+                    StatusCode::BAD_REQUEST,
+                    "invalid or replayed DPoP proof".to_string(),
+                )
             }
             AppError::BadRequest(msg) => (StatusCode::BAD_REQUEST, msg),
             AppError::Webauthn(e) => {

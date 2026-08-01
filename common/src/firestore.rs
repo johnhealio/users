@@ -6,6 +6,8 @@ pub const COLLECTION_USERS: &str = "users";
 pub const COLLECTION_CREDENTIALS: &str = "credentials";
 pub const COLLECTION_REGISTRATION_SESSIONS: &str = "registration_sessions";
 pub const COLLECTION_AUTHENTICATION_SESSIONS: &str = "authentication_sessions";
+pub const COLLECTION_SESSIONS: &str = "sessions";
+pub const COLLECTION_DPOP_REPLAY: &str = "dpop_replay_jtis";
 
 /// Connects to the named Firestore database configured for this deployment
 /// (never the `(default)` database — this project doesn't have one).

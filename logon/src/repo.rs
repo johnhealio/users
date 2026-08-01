@@ -1,17 +1,19 @@
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use chrono::{DateTime, Duration, Utc};
 use common::firestore::{
-    COLLECTION_AUTHENTICATION_SESSIONS, COLLECTION_CREDENTIALS, COLLECTION_USERNAMES,
-    COLLECTION_USERS,
+    COLLECTION_AUTHENTICATION_SESSIONS, COLLECTION_CREDENTIALS, COLLECTION_SESSIONS,
+    COLLECTION_USERNAMES, COLLECTION_USERS,
 };
 use common::models::{StoredCredential, User, UsernameLock};
 use firestore::{FirestoreDb, FirestoreResult};
 use futures::stream::TryStreamExt;
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use uuid::Uuid;
 use webauthn_rs::prelude::{CredentialID, Passkey, PasskeyAuthentication};
 
 const AUTHENTICATION_SESSION_TTL_MINUTES: i64 = 5;
+const SESSION_TTL_MINUTES: i64 = 15;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct AuthenticationSession {
@@ -147,6 +149,49 @@ pub async fn take_authentication_session(
     }
 
     Ok(session)
+}
+
+/// Document stored at `sessions/{hash_token(token)}`.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Session {
+    pub user_id: Uuid,
+    pub jkt: String,
+    pub expires_at: DateTime<Utc>,
+}
+
+/// Doc IDs are a hash of the opaque token, not the token itself, so a
+/// Firestore read/leak doesn't hand out live bearer-equivalent secrets.
+fn hash_token(token: &str) -> String {
+    URL_SAFE_NO_PAD.encode(Sha256::digest(token.as_bytes()))
+}
+
+/// Mints a new opaque session token bound to `jkt` (the DPoP key
+/// thumbprint verified for this logon) and persists it. Returns the raw
+/// token (only ever handed to the caller once) and its expiry.
+pub async fn create_session(
+    db: &FirestoreDb,
+    user_id: Uuid,
+    jkt: &str,
+) -> FirestoreResult<(String, DateTime<Utc>)> {
+    let mut token_bytes = [0u8; 32];
+    rand::fill(&mut token_bytes);
+    let token = URL_SAFE_NO_PAD.encode(token_bytes);
+
+    let expires_at = Utc::now() + Duration::minutes(SESSION_TTL_MINUTES);
+    let session = Session {
+        user_id,
+        jkt: jkt.to_string(),
+        expires_at,
+    };
+    db.fluent()
+        .insert()
+        .into(COLLECTION_SESSIONS)
+        .document_id(hash_token(&token))
+        .object(&session)
+        .execute::<Session>()
+        .await?;
+
+    Ok((token, expires_at))
 }
 
 #[cfg(test)]
