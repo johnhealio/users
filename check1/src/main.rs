@@ -53,7 +53,7 @@ async fn main() {
 
 fn build_router(state: AppState) -> Router {
     Router::new()
-        .route("/api/check", post(check))
+        .route("/api/check1", post(check))
         .nest_service("/common", ServeDir::new(COMMON_STATIC_DIR))
         .fallback_service(ServeDir::new(STATIC_DIR))
         .with_state(state)
@@ -101,7 +101,7 @@ async fn check(
     // plan for why: a proof's htu is bound to one exact URL, so a proof
     // built for this endpoint couldn't be re-verified against a different
     // one anyway).
-    let expected_htu = format!("{}/api/check", state.rp_origin);
+    let expected_htu = format!("{}/api/check1", state.rp_origin);
     let authenticated =
         common::session::authenticate(&state.db, authorization, dpop_proof, "POST", &expected_htu)
             .await
@@ -342,7 +342,7 @@ mod tests {
         })
         .await;
 
-        let check_url = format!("{check1_url}/api/check");
+        let check_url = format!("{check1_url}/api/check1");
         let proof = sign_proof(&key, "POST", &check_url);
 
         let client = reqwest::Client::new();
@@ -378,7 +378,7 @@ mod tests {
         // granting them check1 at all.
         let token = seed_session(&db, user_id, &jkt).await;
 
-        let check_url = format!("{check1_url}/api/check");
+        let check_url = format!("{check1_url}/api/check1");
         let proof = sign_proof(&key, "POST", &check_url);
 
         let client = reqwest::Client::new();

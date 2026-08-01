@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Admin — johnheal.io</title>
+  <link rel="stylesheet" href="/common/styles.css" />
+</head>
+<body>
+  <div id="nav-placeholder"></div>
+
+  <main>
+    <div class="card">
+      <h1>Functions</h1>
+      <form id="function-form">
+        <label for="function-id">Function ID</label>
+        <input id="function-id" required />
+        <label for="function-name">Name</label>
+        <input id="function-name" required />
+        <label for="function-description">Description</label>
+        <input id="function-description" required />
+        <button type="submit">Register / update</button>
+      </form>
+      <button type="button" id="functions-refresh">Refresh list</button>
+      <ul id="functions-list"></ul>
+      <p id="functions-status" class="status"></p>
+    </div>
+
+    <div class="card">
+      <h1>Groups</h1>
+      <form id="group-form">
+        <label for="group-id">Group ID</label>
+        <input id="group-id" required />
+        <label for="group-name">Name</label>
+        <input id="group-name" required />
+        <button type="submit">Create / update</button>
+      </form>
+      <button type="button" id="groups-refresh">Refresh list</button>
+      <ul id="groups-list"></ul>
+      <p id="groups-status" class="status"></p>
+    </div>
+
+    <div class="card">
+      <h1>Group membership</h1>
+      <form id="member-form">
+        <label for="member-group-id">Group ID</label>
+        <input id="member-group-id" required />
+        <label for="member-user-id">User ID</label>
+        <input id="member-user-id" required />
+        <button type="submit" id="member-add-btn">Add member</button>
+        <button type="button" id="member-remove-btn">Remove member</button>
+      </form>
+      <form id="member-list-form">
+        <label for="member-list-group-id">Group ID</label>
+        <input id="member-list-group-id" required />
+        <button type="submit">List members</button>
+      </form>
+      <ul id="members-list"></ul>
+      <p id="members-status" class="status"></p>
+    </div>
+
+    <div class="card">
+      <h1>Grants</h1>
+      <form id="grant-form">
+        <label for="grant-function-id">Function ID</label>
+        <input id="grant-function-id" required />
+        <label for="grant-group-id">Group ID (leave blank if granting to a user)</label>
+        <input id="grant-group-id" />
+        <label for="grant-user-id">User ID (leave blank if granting to a group)</label>
+        <input id="grant-user-id" />
+        <label for="grant-attributes">Attributes (JSON object)</label>
+        <input id="grant-attributes" value="{}" />
+        <button type="submit" id="grant-set-btn">Set grant</button>
+        <button type="button" id="grant-revoke-btn">Revoke grant</button>
+      </form>
+      <form id="grant-list-form">
+        <label for="grant-list-function-id">Function ID</label>
+        <input id="grant-list-function-id" required />
+        <button type="submit">List grants</button>
+      </form>
+      <ul id="grants-list"></ul>
+      <p id="grants-status" class="status"></p>
+    </div>
+  </main>
+
+  <script src="/common/dpop.js"></script>
+  <script src="index.js"></script>
+</body>
+</html>

@@ -10,7 +10,11 @@ use common::session::SessionError;
 use firestore::FirestoreDb;
 use repo::GrantTarget;
 use serde::{Deserialize, Serialize};
+use tower_http::services::ServeDir;
 use uuid::Uuid;
+
+const STATIC_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/static");
+const COMMON_STATIC_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../common/static");
 
 #[derive(Clone)]
 pub struct AppState {
@@ -32,6 +36,8 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api/admin/grants", post(set_grant))
         .route("/api/admin/grants/revoke", post(revoke_grant))
         .route("/api/admin/grants/list", post(list_grants))
+        .nest_service("/common", ServeDir::new(COMMON_STATIC_DIR))
+        .fallback_service(ServeDir::new(STATIC_DIR))
         .with_state(state)
 }
 
