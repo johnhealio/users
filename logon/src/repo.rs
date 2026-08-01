@@ -4,11 +4,11 @@ use common::firestore::{
     COLLECTION_AUTHENTICATION_SESSIONS, COLLECTION_CREDENTIALS, COLLECTION_SESSIONS,
     COLLECTION_USERNAMES, COLLECTION_USERS,
 };
-use common::models::{StoredCredential, User, UsernameLock};
+use common::models::{Session, StoredCredential, User, UsernameLock};
+use common::session::hash_token;
 use firestore::{FirestoreDb, FirestoreResult};
 use futures::stream::TryStreamExt;
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
 use uuid::Uuid;
 use webauthn_rs::prelude::{CredentialID, Passkey, PasskeyAuthentication};
 
@@ -149,20 +149,6 @@ pub async fn take_authentication_session(
     }
 
     Ok(session)
-}
-
-/// Document stored at `sessions/{hash_token(token)}`.
-#[derive(Debug, Serialize, Deserialize)]
-pub struct Session {
-    pub user_id: Uuid,
-    pub jkt: String,
-    pub expires_at: DateTime<Utc>,
-}
-
-/// Doc IDs are a hash of the opaque token, not the token itself, so a
-/// Firestore read/leak doesn't hand out live bearer-equivalent secrets.
-fn hash_token(token: &str) -> String {
-    URL_SAFE_NO_PAD.encode(Sha256::digest(token.as_bytes()))
 }
 
 /// Mints a new opaque session token bound to `jkt` (the DPoP key

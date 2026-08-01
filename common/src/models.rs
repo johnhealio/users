@@ -25,3 +25,14 @@ pub struct StoredCredential {
     pub passkey: webauthn_rs::prelude::Passkey,
     pub created_at: DateTime<Utc>,
 }
+
+/// Document stored at `sessions/{session::hash_token(token)}`. Written by
+/// logon, read/deleted by logout, and (later) read by the authorization
+/// function — shared across functions, unlike `webauthn.rs`'s pattern of
+/// deliberate per-function duplication.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Session {
+    pub user_id: Uuid,
+    pub jkt: String,
+    pub expires_at: DateTime<Utc>,
+}

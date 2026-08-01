@@ -132,7 +132,7 @@ pub async fn verify_proof(
 
 /// RFC 7638 JWK thumbprint for an EC P-256 key: SHA-256 of the canonical
 /// JSON representation, with members in exactly this order (no whitespace).
-fn jwk_thumbprint(x: &str, y: &str) -> String {
+pub fn jwk_thumbprint(x: &str, y: &str) -> String {
     let canonical = format!("{{\"crv\":\"P-256\",\"kty\":\"EC\",\"x\":\"{x}\",\"y\":\"{y}\"}}");
     URL_SAFE_NO_PAD.encode(Sha256::digest(canonical.as_bytes()))
 }
