@@ -1,0 +1,15 @@
+<!--
+  Shared navigation chrome, included by every function's UI.
+  Loaded client-side via fetch() + innerHTML so each function stays a
+  single self-contained static page with no server-side templating.
+-->
+<nav class="site-nav">
+  <a class="site-nav__brand" href="/">
+    <img src="/common/images/logo.svg" alt="John Heal IO" class="site-nav__logo" />
+    <span>johnheal.io</span>
+  </a>
+  <ul class="site-nav__links">
+    <li><a href="/register">Register</a></li>
+    <li><a href="/logon">Log On</a></li>
+  </ul>
+</nav>

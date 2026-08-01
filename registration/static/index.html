@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Register — johnheal.io</title>
+  <link rel="stylesheet" href="/common/styles.css" />
+</head>
+<body>
+  <div id="nav-placeholder"></div>
+
+  <main>
+    <div class="card">
+      <h1>Create an account</h1>
+      <form id="register-form">
+        <label for="username">Username</label>
+        <input id="username" name="username" autocomplete="username" required />
+
+        <label for="display_name">Display name</label>
+        <input id="display_name" name="display_name" autocomplete="name" required />
+
+        <button type="submit" id="submit-btn">Register with a passkey</button>
+      </form>
+      <p id="status" class="status"></p>
+    </div>
+  </main>
+
+  <script src="/index.js"></script>
+</body>
+</html>
