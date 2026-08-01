@@ -52,3 +52,31 @@ pub struct GroupMembership {
 /// except the API that defined them — "fine-grained permission handled at
 /// the API level".
 pub type Attributes = std::collections::HashMap<String, serde_json::Value>;
+
+/// Document stored at `functions/{function_id}`, managed by `admin`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FunctionInfo {
+    #[serde(default, alias = "_firestore_id", skip_serializing_if = "Option::is_none")]
+    pub function_id: Option<String>,
+    pub name: String,
+    pub description: String,
+    pub created_at: DateTime<Utc>,
+}
+
+/// Document stored at `groups/{group_id}`, managed by `admin`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GroupInfo {
+    #[serde(default, alias = "_firestore_id", skip_serializing_if = "Option::is_none")]
+    pub group_id: Option<String>,
+    pub name: String,
+    pub created_at: DateTime<Utc>,
+}
+
+/// Document stored at `groups/{group_id}/members/{user_id}` — the reverse
+/// of [`GroupMembership`], kept as a second denormalized subcollection so
+/// "who's in this group" doesn't need a collection-group query.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct GroupMember {
+    #[serde(default, alias = "_firestore_id", skip_serializing_if = "Option::is_none")]
+    pub user_id: Option<Uuid>,
+}
