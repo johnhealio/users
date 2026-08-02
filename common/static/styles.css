@@ -110,3 +110,54 @@ button:disabled {
 .status--error {
   color: var(--error);
 }
+
+/* Used only by the admin page's user/group picker + checklist flows. */
+.admin-main {
+  max-width: 40rem;
+}
+
+.picker-list {
+  list-style: none;
+  margin: 0.5rem 0 0;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  max-height: 12rem;
+  overflow-y: auto;
+}
+
+.picker-list li {
+  padding: 0.5rem 0.75rem;
+  cursor: pointer;
+  border-bottom: 1px solid var(--border);
+}
+
+.picker-list li:last-child {
+  border-bottom: none;
+}
+
+.picker-list li:hover {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.picker-list li.selected {
+  background: var(--accent);
+  color: #fff;
+}
+
+.checklist {
+  list-style: none;
+  margin: 0.5rem 0 0;
+  padding: 0;
+}
+
+.checklist li {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.375rem 0;
+}
+
+.checklist input[type="checkbox"] {
+  width: auto;
+}

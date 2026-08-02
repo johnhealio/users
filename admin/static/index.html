@@ -9,7 +9,7 @@
 <body>
   <div id="nav-placeholder"></div>
 
-  <main>
+  <main class="admin-main">
     <div class="card">
       <h1>Functions</h1>
       <form id="function-form">
@@ -27,6 +27,18 @@
     </div>
 
     <div class="card">
+      <h1>Users</h1>
+      <p>Click a user to edit their group membership.</p>
+      <button type="button" id="users-refresh">Refresh list</button>
+      <ul id="users-list" class="picker-list"></ul>
+      <div id="user-detail" hidden>
+        <h2 id="user-detail-heading"></h2>
+        <ul id="user-groups-checklist" class="checklist"></ul>
+      </div>
+      <p id="users-status" class="status"></p>
+    </div>
+
+    <div class="card">
       <h1>Groups</h1>
       <form id="group-form">
         <label for="group-id">Group ID</label>
@@ -36,27 +48,13 @@
         <button type="submit">Create / update</button>
       </form>
       <button type="button" id="groups-refresh">Refresh list</button>
-      <ul id="groups-list"></ul>
+      <p>Click a group below to edit its permitted functions.</p>
+      <ul id="groups-list" class="picker-list"></ul>
+      <div id="group-detail" hidden>
+        <h2 id="group-detail-heading"></h2>
+        <ul id="group-functions-checklist" class="checklist"></ul>
+      </div>
       <p id="groups-status" class="status"></p>
-    </div>
-
-    <div class="card">
-      <h1>Group membership</h1>
-      <form id="member-form">
-        <label for="member-group-id">Group ID</label>
-        <input id="member-group-id" required />
-        <label for="member-user-id">User ID</label>
-        <input id="member-user-id" required />
-        <button type="submit" id="member-add-btn">Add member</button>
-        <button type="button" id="member-remove-btn">Remove member</button>
-      </form>
-      <form id="member-list-form">
-        <label for="member-list-group-id">Group ID</label>
-        <input id="member-list-group-id" required />
-        <button type="submit">List members</button>
-      </form>
-      <ul id="members-list"></ul>
-      <p id="members-status" class="status"></p>
     </div>
 
     <div class="card">

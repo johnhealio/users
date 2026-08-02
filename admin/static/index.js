@@ -77,7 +77,94 @@ document.getElementById("functions-refresh").addEventListener("click", async () 
   }
 });
 
+// --- Users ---
+//
+// Click a user in the list to reveal every group as a checkbox, checked
+// for the groups they're currently in. Toggling a checkbox adds/removes
+// that one membership immediately (existing groups/members/add|remove
+// endpoints) and re-renders from a fresh read.
+
+let selectedUserId = null;
+
+function renderPickerSelection(listId, selectedId) {
+  for (const li of document.getElementById(listId).children) {
+    li.classList.toggle("selected", li.dataset.id === selectedId);
+  }
+}
+
+async function refreshUsers() {
+  const result = await adminRequest("/api/admin/users/list", {});
+  const list = document.getElementById("users-list");
+  list.innerHTML = "";
+  for (const user of result.users) {
+    const li = document.createElement("li");
+    li.textContent = `${user.username} (${user.display_name})`;
+    li.dataset.id = user.user_id;
+    li.addEventListener("click", () => selectUser(user.user_id, user.username));
+    list.appendChild(li);
+  }
+  renderPickerSelection("users-list", selectedUserId);
+}
+
+async function selectUser(userId, username) {
+  selectedUserId = userId;
+  renderPickerSelection("users-list", selectedUserId);
+  document.getElementById("user-detail").hidden = false;
+  document.getElementById("user-detail-heading").textContent = `${username}'s groups`;
+  await renderUserGroupsChecklist();
+}
+
+async function renderUserGroupsChecklist() {
+  const [groupsResult, membershipResult] = await Promise.all([
+    adminRequest("/api/admin/groups/list", {}),
+    adminRequest("/api/admin/users/groups", { user_id: selectedUserId }),
+  ]);
+  const memberOf = new Set(membershipResult.group_ids);
+
+  const checklist = document.getElementById("user-groups-checklist");
+  checklist.innerHTML = "";
+  for (const group of groupsResult.groups) {
+    const li = document.createElement("li");
+    const label = document.createElement("label");
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.checked = memberOf.has(group.group_id);
+    checkbox.addEventListener("change", async () => {
+      const path = checkbox.checked
+        ? "/api/admin/groups/members/add"
+        : "/api/admin/groups/members/remove";
+      try {
+        await adminRequest(path, { group_id: group.group_id, user_id: selectedUserId });
+        setStatus("users-status", `Updated ${group.group_id} membership.`, false);
+      } catch (err) {
+        setStatus("users-status", err.message || String(err), true);
+        checkbox.checked = !checkbox.checked;
+      }
+    });
+    label.appendChild(checkbox);
+    label.append(` ${group.group_id} — ${group.name}`);
+    li.appendChild(label);
+    checklist.appendChild(li);
+  }
+}
+
+document.getElementById("users-refresh").addEventListener("click", async () => {
+  try {
+    await refreshUsers();
+  } catch (err) {
+    setStatus("users-status", err.message || String(err), true);
+  }
+});
+
 // --- Groups ---
+//
+// Click a group in the list to reveal every function as a checkbox,
+// checked for the functions currently granted to that group. Toggling a
+// checkbox sets/revokes that one grant (with {} attributes — use the raw
+// Grants form below for anything needing custom attributes or a
+// direct-to-user grant) and re-renders from a fresh read.
+
+let selectedGroupId = null;
 
 async function refreshGroups() {
   const result = await adminRequest("/api/admin/groups/list", {});
@@ -86,7 +173,60 @@ async function refreshGroups() {
   for (const g of result.groups) {
     const li = document.createElement("li");
     li.textContent = `${g.group_id} — ${g.name}`;
+    li.dataset.id = g.group_id;
+    li.addEventListener("click", () => selectGroup(g.group_id));
     list.appendChild(li);
+  }
+  renderPickerSelection("groups-list", selectedGroupId);
+}
+
+async function selectGroup(groupId) {
+  selectedGroupId = groupId;
+  renderPickerSelection("groups-list", selectedGroupId);
+  document.getElementById("group-detail").hidden = false;
+  document.getElementById("group-detail-heading").textContent = `${groupId}'s functions`;
+  await renderGroupFunctionsChecklist();
+}
+
+async function renderGroupFunctionsChecklist() {
+  const [functionsResult, grantsResult] = await Promise.all([
+    adminRequest("/api/admin/functions/list", {}),
+    adminRequest("/api/admin/groups/functions", { group_id: selectedGroupId }),
+  ]);
+  const granted = new Set(grantsResult.functions.map((f) => f.function_id));
+
+  const checklist = document.getElementById("group-functions-checklist");
+  checklist.innerHTML = "";
+  for (const fn of functionsResult.functions) {
+    const li = document.createElement("li");
+    const label = document.createElement("label");
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.checked = granted.has(fn.function_id);
+    checkbox.addEventListener("change", async () => {
+      try {
+        if (checkbox.checked) {
+          await adminRequest("/api/admin/grants", {
+            function_id: fn.function_id,
+            group_id: selectedGroupId,
+            attributes: {},
+          });
+        } else {
+          await adminRequest("/api/admin/grants/revoke", {
+            function_id: fn.function_id,
+            group_id: selectedGroupId,
+          });
+        }
+        setStatus("groups-status", `Updated ${fn.function_id} grant.`, false);
+      } catch (err) {
+        setStatus("groups-status", err.message || String(err), true);
+        checkbox.checked = !checkbox.checked;
+      }
+    });
+    label.appendChild(checkbox);
+    label.append(` ${fn.function_id} — ${fn.name}`);
+    li.appendChild(label);
+    checklist.appendChild(li);
   }
 }
 
@@ -108,55 +248,6 @@ document.getElementById("groups-refresh").addEventListener("click", async () => 
     await refreshGroups();
   } catch (err) {
     setStatus("groups-status", err.message || String(err), true);
-  }
-});
-
-// --- Group membership ---
-
-async function listMembers(groupId) {
-  const result = await adminRequest("/api/admin/groups/members/list", { group_id: groupId });
-  const list = document.getElementById("members-list");
-  list.innerHTML = "";
-  for (const userId of result.user_ids) {
-    const li = document.createElement("li");
-    li.textContent = userId;
-    list.appendChild(li);
-  }
-}
-
-document.getElementById("member-form").addEventListener("submit", async (event) => {
-  event.preventDefault();
-  const group_id = document.getElementById("member-group-id").value;
-  const user_id = document.getElementById("member-user-id").value;
-  try {
-    await adminRequest("/api/admin/groups/members/add", { group_id, user_id });
-    setStatus("members-status", `Added ${user_id} to ${group_id}.`, false);
-    await listMembers(group_id);
-  } catch (err) {
-    setStatus("members-status", err.message || String(err), true);
-  }
-});
-
-document.getElementById("member-remove-btn").addEventListener("click", async () => {
-  const group_id = document.getElementById("member-group-id").value;
-  const user_id = document.getElementById("member-user-id").value;
-  try {
-    await adminRequest("/api/admin/groups/members/remove", { group_id, user_id });
-    setStatus("members-status", `Removed ${user_id} from ${group_id}.`, false);
-    await listMembers(group_id);
-  } catch (err) {
-    setStatus("members-status", err.message || String(err), true);
-  }
-});
-
-document.getElementById("member-list-form").addEventListener("submit", async (event) => {
-  event.preventDefault();
-  const group_id = document.getElementById("member-list-group-id").value;
-  try {
-    await listMembers(group_id);
-    setStatus("members-status", `Listed members of ${group_id}.`, false);
-  } catch (err) {
-    setStatus("members-status", err.message || String(err), true);
   }
 });
 

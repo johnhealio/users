@@ -1,8 +1,9 @@
 use chrono::Utc;
 use common::firestore::{COLLECTION_FUNCTIONS, COLLECTION_GROUPS, COLLECTION_USERS};
-use common::models::{Attributes, FunctionInfo, GroupInfo, GroupMember, GroupMembership};
+use common::models::{Attributes, FunctionInfo, GroupInfo, GroupMember, GroupMembership, User};
 use firestore::{FirestoreDb, FirestoreResult};
 use futures::stream::TryStreamExt;
+use serde::Deserialize;
 use uuid::Uuid;
 
 pub enum GrantTarget {
@@ -166,6 +167,23 @@ pub async fn set_grant(
         .object(attributes)
         .execute::<Attributes>()
         .await?;
+
+    // Reverse index for groups only: lets the admin UI ask "which functions
+    // does this group have" without a fan-out scan over every function.
+    // No equivalent is kept for direct user grants — nothing today needs
+    // to answer that question the other way round.
+    if let GrantTarget::Group(group_id) = target {
+        let reverse_parent = db.parent_path(COLLECTION_GROUPS, group_id)?;
+        db.fluent()
+            .update()
+            .in_col(COLLECTION_FUNCTIONS)
+            .document_id(function_id)
+            .parent(&reverse_parent)
+            .object(attributes)
+            .execute::<Attributes>()
+            .await?;
+    }
+
     Ok(())
 }
 
@@ -183,7 +201,83 @@ pub async fn revoke_grant(
         .parent(&parent)
         .execute()
         .await?;
+
+    if let GrantTarget::Group(group_id) = target {
+        let reverse_parent = db.parent_path(COLLECTION_GROUPS, group_id)?;
+        db.fluent()
+            .delete()
+            .from(COLLECTION_FUNCTIONS)
+            .document_id(function_id)
+            .parent(&reverse_parent)
+            .execute()
+            .await?;
+    }
+
     Ok(())
+}
+
+/// Lists every registered user. Used by the admin UI's user picker.
+pub async fn list_users(db: &FirestoreDb) -> FirestoreResult<Vec<User>> {
+    db.fluent()
+        .list()
+        .from(COLLECTION_USERS)
+        .obj()
+        .stream_all_with_errors()
+        .await?
+        .try_collect()
+        .await
+}
+
+/// Lists the IDs of every group `user_id` belongs to, via the reverse
+/// index at `users/{user_id}/groups` (written by [`add_group_member`]).
+pub async fn list_user_groups(db: &FirestoreDb, user_id: Uuid) -> FirestoreResult<Vec<String>> {
+    let parent = db.parent_path(COLLECTION_USERS, user_id.to_string())?;
+    let memberships: Vec<GroupMembership> = db
+        .fluent()
+        .list()
+        .from(COLLECTION_GROUPS)
+        .parent(&parent)
+        .obj()
+        .stream_all_with_errors()
+        .await?
+        .try_collect()
+        .await?;
+    Ok(memberships.into_iter().filter_map(|m| m.group_id).collect())
+}
+
+#[derive(Debug, Default, Deserialize)]
+struct DocId {
+    #[serde(default, alias = "_firestore_id")]
+    id: Option<String>,
+}
+
+/// Lists every function `group_id` is granted, with its attributes, via
+/// the reverse index [`set_grant`] maintains at `groups/{group_id}/functions`.
+pub async fn list_group_functions(
+    db: &FirestoreDb,
+    group_id: &str,
+) -> FirestoreResult<Vec<(String, Attributes)>> {
+    let parent = db.parent_path(COLLECTION_GROUPS, group_id)?;
+    let markers: Vec<DocId> = db
+        .fluent()
+        .list()
+        .from(COLLECTION_FUNCTIONS)
+        .parent(&parent)
+        .obj()
+        .stream_all_with_errors()
+        .await?
+        .try_collect()
+        .await?;
+    let mut functions = Vec::new();
+    for marker in markers {
+        if let Some(function_id) = marker.id
+            && let Some(attrs) =
+                get_attributes(db, COLLECTION_FUNCTIONS, &parent, &function_id).await?
+        {
+            functions.push((function_id, attrs));
+        }
+    }
+    Ok(functions)
 }
 
 pub struct Grants {

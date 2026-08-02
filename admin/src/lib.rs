@@ -5,7 +5,7 @@ use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::routing::post;
 use axum::{Json, Router};
-use common::models::{Attributes, FunctionInfo, GroupInfo};
+use common::models::{Attributes, FunctionInfo, GroupInfo, User};
 use common::session::SessionError;
 use firestore::FirestoreDb;
 use repo::GrantTarget;
@@ -36,6 +36,9 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api/admin/grants", post(set_grant))
         .route("/api/admin/grants/revoke", post(revoke_grant))
         .route("/api/admin/grants/list", post(list_grants))
+        .route("/api/admin/users/list", post(list_users))
+        .route("/api/admin/users/groups", post(user_groups))
+        .route("/api/admin/groups/functions", post(group_functions))
         .nest_service("/common", ServeDir::new(COMMON_STATIC_DIR))
         .fallback_service(ServeDir::new(STATIC_DIR))
         .with_state(state)
@@ -297,6 +300,74 @@ async fn list_grants(
             .into_iter()
             .map(|(user_id, attributes)| UserGrant {
                 user_id,
+                attributes,
+            })
+            .collect(),
+    }))
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct ListUsersResponse {
+    users: Vec<User>,
+}
+
+async fn list_users(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<Json<ListUsersResponse>, AppError> {
+    require_admin(&state, &headers, "/api/admin/users/list").await?;
+    let users = repo::list_users(&state.db).await?;
+    Ok(Json(ListUsersResponse { users }))
+}
+
+#[derive(Debug, Deserialize)]
+struct UserGroupsRequest {
+    user_id: Uuid,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct UserGroupsResponse {
+    group_ids: Vec<String>,
+}
+
+async fn user_groups(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(req): Json<UserGroupsRequest>,
+) -> Result<Json<UserGroupsResponse>, AppError> {
+    require_admin(&state, &headers, "/api/admin/users/groups").await?;
+    let group_ids = repo::list_user_groups(&state.db, req.user_id).await?;
+    Ok(Json(UserGroupsResponse { group_ids }))
+}
+
+#[derive(Debug, Deserialize)]
+struct GroupFunctionsRequest {
+    group_id: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct GroupFunctionGrant {
+    function_id: String,
+    attributes: Attributes,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct GroupFunctionsResponse {
+    functions: Vec<GroupFunctionGrant>,
+}
+
+async fn group_functions(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(req): Json<GroupFunctionsRequest>,
+) -> Result<Json<GroupFunctionsResponse>, AppError> {
+    require_admin(&state, &headers, "/api/admin/groups/functions").await?;
+    let functions = repo::list_group_functions(&state.db, &req.group_id).await?;
+    Ok(Json(GroupFunctionsResponse {
+        functions: functions
+            .into_iter()
+            .map(|(function_id, attributes)| GroupFunctionGrant {
+                function_id,
                 attributes,
             })
             .collect(),
@@ -779,5 +850,121 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(res.status(), 401);
+    }
+
+    #[tokio::test]
+    async fn list_users_shows_a_registered_user() {
+        let db = test_db().await;
+        let authorization_url = spawn_authorization_server(db.clone()).await;
+        let base_url = spawn_admin_server(db.clone(), authorization_url).await;
+        let (key, token) = admin_session(&db).await;
+        let client = reqwest::Client::new();
+
+        let user_id = Uuid::new_v4();
+        db.fluent()
+            .insert()
+            .into(common::firestore::COLLECTION_USERS)
+            .document_id(user_id.to_string())
+            .object(&common::models::User {
+                user_id,
+                username: format!("test-user-{user_id}"),
+                display_name: "Test User".to_string(),
+                created_at: Utc::now(),
+            })
+            .execute::<common::models::User>()
+            .await
+            .unwrap();
+
+        let list_url = format!("{base_url}/api/admin/users/list");
+        let list: ListUsersResponse = authed_post(&client, &list_url, &key, &token)
+            .json(&json!({}))
+            .send()
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        assert!(list.users.iter().any(|u| u.user_id == user_id));
+    }
+
+    #[tokio::test]
+    async fn user_groups_reflects_membership() {
+        let db = test_db().await;
+        let authorization_url = spawn_authorization_server(db.clone()).await;
+        let base_url = spawn_admin_server(db.clone(), authorization_url).await;
+        let (key, token) = admin_session(&db).await;
+        let client = reqwest::Client::new();
+        let group_id = format!("test-group-{}", Uuid::new_v4());
+        let member_id = Uuid::new_v4();
+
+        let add_url = format!("{base_url}/api/admin/groups/members/add");
+        authed_post(&client, &add_url, &key, &token)
+            .json(&json!({"group_id": group_id, "user_id": member_id}))
+            .send()
+            .await
+            .unwrap();
+
+        let groups_url = format!("{base_url}/api/admin/users/groups");
+        let res: UserGroupsResponse = authed_post(&client, &groups_url, &key, &token)
+            .json(&json!({"user_id": member_id}))
+            .send()
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        assert!(res.group_ids.contains(&group_id));
+    }
+
+    #[tokio::test]
+    async fn group_functions_reflects_grants_and_revokes() {
+        let db = test_db().await;
+        let authorization_url = spawn_authorization_server(db.clone()).await;
+        let base_url = spawn_admin_server(db.clone(), authorization_url).await;
+        let (key, token) = admin_session(&db).await;
+        let client = reqwest::Client::new();
+        let function_id = format!("test-fn-{}", Uuid::new_v4());
+        let group_id = format!("test-group-{}", Uuid::new_v4());
+
+        let set_url = format!("{base_url}/api/admin/grants");
+        authed_post(&client, &set_url, &key, &token)
+            .json(&json!({"function_id": function_id, "group_id": group_id, "attributes": {}}))
+            .send()
+            .await
+            .unwrap();
+
+        let list_url = format!("{base_url}/api/admin/groups/functions");
+        let res: GroupFunctionsResponse = authed_post(&client, &list_url, &key, &token)
+            .json(&json!({"group_id": group_id}))
+            .send()
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        assert!(res
+            .functions
+            .iter()
+            .any(|f| f.function_id == function_id));
+
+        let revoke_url = format!("{base_url}/api/admin/grants/revoke");
+        authed_post(&client, &revoke_url, &key, &token)
+            .json(&json!({"function_id": function_id, "group_id": group_id}))
+            .send()
+            .await
+            .unwrap();
+
+        let res: GroupFunctionsResponse = authed_post(&client, &list_url, &key, &token)
+            .json(&json!({"group_id": group_id}))
+            .send()
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        assert!(!res
+            .functions
+            .iter()
+            .any(|f| f.function_id == function_id));
     }
 }
